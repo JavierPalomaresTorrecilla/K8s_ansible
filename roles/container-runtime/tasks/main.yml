@@ -6,11 +6,22 @@
     group: root
     mode: "0755"
 
-- name: Install Docker/containerd repository key
+- name: Download Docker/containerd repository key
   ansible.builtin.get_url:
     url: "{{ containerd_key_url }}"
-    dest: "{{ containerd_keyring_path }}"
+    dest: "{{ containerd_keyring_path }}.asc"
     mode: "0644"
+  register: containerd_key_download
+
+- name: Check existing Docker/containerd keyring
+  ansible.builtin.stat:
+    path: "{{ containerd_keyring_path }}"
+  register: containerd_keyring_stat
+
+- name: Convert Docker/containerd key to keyring format
+  ansible.builtin.command: >
+    gpg --dearmor -o {{ containerd_keyring_path }} {{ containerd_keyring_path }}.asc
+  when: containerd_key_download.changed or not containerd_keyring_stat.stat.exists
 
 - name: Configure Docker/containerd apt repository
   ansible.builtin.apt_repository:

@@ -1,0 +1,93 @@
+---
+- name: Check if kubeadm binary exists
+  ansible.builtin.stat:
+    path: /usr/bin/kubeadm
+  register: kubeadm_binary
+
+- name: Check if kubectl binary exists
+  ansible.builtin.stat:
+    path: /usr/bin/kubectl
+  register: kubectl_binary
+
+- name: Check if admin kubeconfig exists
+  ansible.builtin.stat:
+    path: "{{ k8s_uninstall_kubeconfig_path }}"
+  register: kube_admin_conf
+
+- name: Remove Cilium deployment if present
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ k8s_uninstall_kubeconfig_path }}
+    delete -f {{ k8s_uninstall_cilium_manifest_url }}
+    --ignore-not-found=true
+  when:
+    - kube_admin_conf.stat.exists
+    - kubectl_binary.stat.exists
+  register: cilium_delete
+  changed_when: "'deleted' in cilium_delete.stdout"
+  failed_when: false
+
+- name: Reset kubeadm cluster state
+  ansible.builtin.command: >
+    kubeadm reset -f --cri-socket {{ k8s_uninstall_reset_cri_socket }}
+  when: kubeadm_binary.stat.exists
+  register: kubeadm_reset
+  changed_when: kubeadm_reset.rc == 0
+
+- name: Stop and disable kubelet service when present
+  ansible.builtin.service:
+    name: kubelet
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Remove Kubernetes directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ k8s_uninstall_clean_directories }}"
+
+- name: Remove kubeconfig files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ k8s_uninstall_clean_files | reject('equalto', '') | list }}"
+
+- name: Remove Kubernetes packages
+  ansible.builtin.apt:
+    name: "{{ k8s_uninstall_packages_to_remove }}"
+    state: absent
+    purge: true
+    autoremove: true
+  when: k8s_uninstall_remove_packages | bool
+
+- name: Remove container runtime packages
+  ansible.builtin.apt:
+    name: "{{ k8s_uninstall_container_runtime_packages }}"
+    state: absent
+    purge: true
+    autoremove: true
+  when: k8s_uninstall_remove_container_runtime | bool
+
+- name: Remove Kubernetes apt repository file
+  ansible.builtin.file:
+    path: "{{ k8s_uninstall_kubernetes_repo_file }}"
+    state: absent
+  when: k8s_uninstall_remove_repos | bool
+
+- name: Remove containerd apt repository file
+  ansible.builtin.file:
+    path: "{{ k8s_uninstall_containerd_repo_file }}"
+    state: absent
+  when: k8s_uninstall_remove_repos | bool
+
+- name: Remove Kubernetes apt keyring
+  ansible.builtin.file:
+    path: "{{ k8s_uninstall_kubernetes_keyring_path }}"
+    state: absent
+  when: k8s_uninstall_remove_repos | bool
+
+- name: Remove containerd apt keyring
+  ansible.builtin.file:
+    path: "{{ k8s_uninstall_containerd_keyring_path }}"
+    state: absent
+  when: k8s_uninstall_remove_repos | bool

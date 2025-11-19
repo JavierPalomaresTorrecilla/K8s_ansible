@@ -9,8 +9,19 @@
 - name: Download Kubernetes apt repository key
   ansible.builtin.get_url:
     url: "{{ kubernetes_apt_key_url }}"
-    dest: "{{ kubernetes_keyring_path }}"
+    dest: "{{ kubernetes_keyring_path }}.asc"
     mode: "0644"
+  register: kubernetes_key_download
+
+- name: Check existing Kubernetes keyring file
+  ansible.builtin.stat:
+    path: "{{ kubernetes_keyring_path }}"
+  register: kubernetes_keyring_stat
+
+- name: Convert Kubernetes repository key to keyring format
+  ansible.builtin.command: >
+    gpg --dearmor -o {{ kubernetes_keyring_path }} {{ kubernetes_keyring_path }}.asc
+  when: kubernetes_key_download.changed or not kubernetes_keyring_stat.stat.exists
 
 - name: Add Kubernetes apt repository
   ansible.builtin.apt_repository:

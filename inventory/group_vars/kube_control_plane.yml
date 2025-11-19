@@ -1,0 +1,4 @@
+---
+# Managed by test_vo
+control_plane_endpoint: 192.168.40.87:6443
+etcd_extra_args: {}

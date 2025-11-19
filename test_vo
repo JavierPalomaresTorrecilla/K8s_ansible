@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: ./test_vo --host-ip <IP> [--host-name <name>] [--inventory <path>] [--uninstall]
+
+Actions:
+  (default) Install dependencies + bootstrap 1-node control plane + deploy Cilium locally.
+  --uninstall  : Run the uninstall playbook locally to revert everything.
+
+Examples:
+  ./test_vo --host-ip 192.168.40.87 --host-name nuc-master
+  ./test_vo --host-ip 192.168.40.87 --uninstall
+EOF
+}
+
+host_ip=""
+host_name="nuc-master"
+inventory_path="inventory/hosts.ini"
+action="install"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --host-ip)
+      host_ip="${2:-}"
+      shift 2
+      ;;
+    --host-name)
+      host_name="${2:-}"
+      shift 2
+      ;;
+    --inventory)
+      inventory_path="${2:-}"
+      shift 2
+      ;;
+    --uninstall)
+      action="uninstall"
+      shift 1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -z "$host_ip" ]]; then
+  echo "Error: --host-ip is required." >&2
+  usage
+  exit 1
+fi
+
+if ! command -v ansible >/dev/null 2>&1; then
+  echo "ansible binary not found in PATH" >&2
+  exit 1
+fi
+
+if ! command -v ansible-playbook >/dev/null 2>&1; then
+  echo "ansible-playbook binary not found in PATH" >&2
+  exit 1
+fi
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$repo_root"
+
+cat > "$inventory_path" <<EOF
+[kube_control_plane]
+$host_name ansible_host=127.0.0.1 ansible_connection=local ansible_python_interpreter=/usr/bin/python3
+EOF
+
+mkdir -p inventory/group_vars
+
+cat > inventory/group_vars/kube_control_plane.yml <<EOF
+---
+# Managed by test_vo
+control_plane_endpoint: $host_ip:6443
+etcd_extra_args: {}
+EOF
+
+echo "[INFO] Inventory and control plane vars updated for $host_name ($host_ip)"
+
+if [[ "$action" == "uninstall" ]]; then
+  echo "[INFO] Running uninstall playbook..."
+  ansible-playbook -i "$inventory_path" playbooks/uninstall.yml
+  exit $?
+fi
+
+echo "[INFO] Running site playbook (single control plane)..."
+ansible-playbook -i "$inventory_path" playbooks/site.yml --limit "$host_name"
+
+echo "[INFO] Checking cluster node status..."
+ansible -i "$inventory_path" "$host_name" -b -m command -a "kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes -o wide"
+
+echo "[INFO] All steps completed. Use ./test_vo --host-ip $host_ip --uninstall to roll back."

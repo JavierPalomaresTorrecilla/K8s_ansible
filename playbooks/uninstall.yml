@@ -1,0 +1,7 @@
+---
+- name: Uninstall Kubernetes components from all nodes
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - k8s-uninstall

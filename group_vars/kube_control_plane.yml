@@ -1,4 +1,0 @@
----
-# Variables specific to control plane nodes
-control_plane_endpoint: 10.10.10.100:6443
-etcd_extra_args: {}
