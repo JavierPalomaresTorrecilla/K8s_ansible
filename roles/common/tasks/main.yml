@@ -1,0 +1,50 @@
+- name: Refresh apt package index
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: "{{ apt_cache_valid_time }}"
+
+- name: Install base system packages
+  ansible.builtin.apt:
+    name: "{{ common_base_packages }}"
+    state: present
+
+- name: Ensure time synchronization service is enabled
+  ansible.builtin.service:
+    name: "{{ time_sync_service }}"
+    state: started
+    enabled: true
+
+- name: Configure system hostname
+  ansible.builtin.hostname:
+    name: "{{ common_hostname }}"
+  when: common_manage_hostname | bool
+
+- name: Ensure loopback hosts entry matches hostname
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^127\\.0\\.1\\.1\\s+"
+    line: "127.0.1.1 {{ common_hostname }}"
+    state: present
+  when:
+    - common_manage_hosts_entries | bool
+    - common_manage_loopback_entry | bool
+
+- name: Ensure hosts entries for other cluster nodes
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: "^{{ (hostvars[item].ansible_host | default(item)) | regex_escape }}\\s+"
+    line: "{{ hostvars[item].ansible_host | default(item) }} {{ item }}"
+    state: present
+  loop: "{{ groups['all'] | default([]) | difference([inventory_hostname]) }}"
+  when:
+    - common_manage_hosts_entries | bool
+    - (hostvars[item].ansible_host | default('')) | length > 0
+
+- name: Verify connectivity with peer nodes
+  ansible.builtin.command: "ping -c1 -W1 {{ hostvars[item].ansible_host | default(item) }}"
+  loop: "{{ groups['all'] | default([]) | difference([inventory_hostname]) }}"
+  register: _ping_result
+  changed_when: false
+  when:
+    - common_verify_peer_connectivity | bool
+    - (hostvars[item].ansible_host | default('')) | length > 0

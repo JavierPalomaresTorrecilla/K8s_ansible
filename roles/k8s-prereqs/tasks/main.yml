@@ -1,0 +1,49 @@
+- name: Disable swap when enabled
+  ansible.builtin.command: swapoff -a
+  when: (ansible_swaptotal_mb | default(0)) > 0
+  changed_when: (ansible_swaptotal_mb | default(0)) > 0
+
+- name: Remove swap entries from fstab
+  ansible.builtin.lineinfile:
+    path: "{{ item.path }}"
+    regexp: "{{ item.regexp }}"
+    state: absent
+    backrefs: false
+  loop: "{{ swap_file_entries }}"
+
+- name: Ensure kernel modules are configured to load on boot
+  ansible.builtin.copy:
+    dest: "{{ modules_load_config }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |-
+      {% for module in kernel_modules %}
+      {{ module }}
+      {% endfor %}
+
+- name: Load required kernel modules
+  ansible.builtin.command: "modprobe {{ item }}"
+  loop: "{{ kernel_modules }}"
+  changed_when: false
+
+- name: Persist Kubernetes sysctl parameters
+  ansible.builtin.copy:
+    dest: "{{ k8s_sysctl_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |-
+      {% for key, value in k8s_sysctl_settings.items() %}
+      {{ key }} = {{ value }}
+      {% endfor %}
+  notify: Reload sysctl settings
+
+- name: Apply sysctl parameters immediately
+  ansible.builtin.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: true
+    reload: false
+  loop: "{{ k8s_sysctl_settings | dict2items }}"

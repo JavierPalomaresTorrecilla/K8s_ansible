@@ -1,0 +1,17 @@
+kubernetes_keyring_dir: /etc/apt/keyrings
+kubernetes_keyring_path: "{{ kubernetes_keyring_dir }}/kubernetes-apt-keyring.gpg"
+kubernetes_repo_series: "{{ kube_version | regex_replace('^([0-9]+\\.[0-9]+).*', '\\1') }}"
+kubernetes_channel: "v{{ kubernetes_repo_series }}"
+kubernetes_apt_repo: >-
+  deb [signed-by={{ kubernetes_keyring_path }}]
+  https://pkgs.k8s.io/core:/stable:/{{ kubernetes_channel }}/deb/ /
+kubernetes_apt_key_url: "https://pkgs.k8s.io/core:/stable:/{{ kubernetes_channel }}/deb/Release.key"
+kubernetes_packages:
+  - kubelet
+  - kubeadm
+  - kubectl
+kubernetes_package_suffix: "-1.1"
+kubernetes_package_state: present
+kubernetes_hold_packages: true
+kubelet_service_name: kubelet
+kubernetes_manage_kubelet_service: true

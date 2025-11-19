@@ -1,0 +1,34 @@
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: {{ kubeadm_control_plane_endpoint.split(':')[0] if ':' in kubeadm_control_plane_endpoint else kubeadm_control_plane_endpoint }}
+  bindPort: {{ kubeadm_control_plane_endpoint.split(':')[1] if ':' in kubeadm_control_plane_endpoint else 6443 }}
+nodeRegistration:
+  criSocket: unix:///run/containerd/containerd.sock
+  name: {{ inventory_hostname }}
+
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+clusterName: {{ kubeadm_cluster_name }}
+kubernetesVersion: "v{{ kube_version }}"
+controlPlaneEndpoint: "{{ kubeadm_control_plane_endpoint }}"
+networking:
+  podSubnet: {{ kubeadm_pod_network_cidr }}
+  serviceSubnet: {{ kubeadm_service_cidr }}
+apiServer:
+  timeoutForControlPlane: 4m0s
+controllerManager: {}
+scheduler: {}
+certificateSANs:
+  - {{ kubeadm_control_plane_endpoint.split(':')[0] if ':' in kubeadm_control_plane_endpoint else kubeadm_control_plane_endpoint }}
+
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+
+---
+apiVersion: kubeproxy.config.k8s.io/v1alpha1
+kind: KubeProxyConfiguration
+mode: iptables

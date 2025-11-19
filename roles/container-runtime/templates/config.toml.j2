@@ -1,0 +1,47 @@
+version = 2
+root = "/var/lib/containerd"
+state = "/run/containerd"
+plugin_dir = ""
+dumper = ""
+
+[grpc]
+  address = "/run/containerd/containerd.sock"
+  uid = 0
+  gid = 0
+  max_recv_message_size = 16777216
+  max_send_message_size = 16777216
+
+[debug]
+  address = ""
+  uid = 0
+  gid = 0
+  level = "info"
+
+[metrics]
+  address = ""
+
+[cgroup]
+  path = ""
+
+[plugins]
+  [plugins."io.containerd.grpc.v1.cri"]
+    sandbox_image = "registry.k8s.io/pause:3.9"
+    enable_selinux = false
+    max_container_log_line_size = 16384
+    [plugins."io.containerd.grpc.v1.cri".containerd]
+      snapshotter = "overlayfs"
+      no_pivot = false
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
+        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+          runtime_type = "io.containerd.runc.v2"
+          runtime_engine = ""
+          runtime_root = ""
+          privileged_without_host_devices = false
+          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+            SystemdCgroup = true
+  [plugins."io.containerd.internal.v1.opt"]
+    path = "/opt/containerd"
+  [plugins."io.containerd.internal.v1.restart"]
+    interval = "10s"
+  [plugins."io.containerd.metadata.v1.bolt"]
+    content_sharing_policy = "shared"

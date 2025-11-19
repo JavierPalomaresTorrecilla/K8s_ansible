@@ -1,0 +1,3 @@
+---
+# Variables specific to worker nodes
+worker_taints: []

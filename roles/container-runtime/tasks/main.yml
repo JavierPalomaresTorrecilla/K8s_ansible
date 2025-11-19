@@ -1,0 +1,57 @@
+- name: Ensure APT keyring directory exists
+  ansible.builtin.file:
+    path: "{{ containerd_keyring_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Docker/containerd repository key
+  ansible.builtin.get_url:
+    url: "{{ containerd_key_url }}"
+    dest: "{{ containerd_keyring_path }}"
+    mode: "0644"
+
+- name: Configure Docker/containerd apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch={{ containerd_repo_arch }} signed-by={{ containerd_keyring_path }}]
+      {{ containerd_repo_url }} {{ containerd_repo_distribution }} {{ containerd_repo_components }}
+    filename: "{{ containerd_repo_name }}"
+    state: present
+
+- name: Determine containerd package specification
+  ansible.builtin.set_fact:
+    containerd_package_spec: >-
+      {{ containerd_package_name if ((containerd_package_version | default('')) | length) == 0
+         else containerd_package_name ~ '=' ~ containerd_package_version }}
+
+- name: Install containerd runtime
+  ansible.builtin.apt:
+    name: "{{ containerd_package_spec }}"
+    state: present
+    update_cache: true
+  notify: Restart containerd
+
+- name: Ensure containerd configuration directory exists
+  ansible.builtin.file:
+    path: "{{ containerd_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy containerd configuration
+  ansible.builtin.template:
+    src: "{{ containerd_config_template }}"
+    dest: "{{ containerd_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart containerd
+
+- name: Ensure containerd service is enabled
+  ansible.builtin.service:
+    name: "{{ containerd_service_name }}"
+    state: "{{ containerd_state }}"
+    enabled: "{{ containerd_enabled }}"

@@ -1,0 +1,13 @@
+# Variables por defecto para prerequisitos de Kubernetes
+swap_file_entries:
+  - path: /etc/fstab
+    regexp: '^\s*([^#\n]+\s+)?swap\s'
+k8s_sysctl_config_path: /etc/sysctl.d/99-kubernetes-cri.conf
+k8s_sysctl_settings:
+  net.bridge.bridge-nf-call-iptables: 1
+  net.bridge.bridge-nf-call-ip6tables: 1
+  net.ipv4.ip_forward: 1
+modules_load_config: /etc/modules-load.d/k8s.conf
+kernel_modules:
+  - overlay
+  - br_netfilter

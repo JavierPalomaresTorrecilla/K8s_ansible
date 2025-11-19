@@ -1,0 +1,12 @@
+kubeadm_config_dir: /etc/kubernetes/kubeadm
+kubeadm_config_path: "{{ kubeadm_config_dir }}/kubeadm-config.yaml"
+kubeconfig_user: "{{ ansible_user | default('ubuntu') }}"
+kubeconfig_group: "{{ kubeconfig_user }}"
+kubeconfig_home: "{{ '/root' if kubeconfig_user == 'root' else '/home/' ~ kubeconfig_user }}"
+kubeconfig_path: "{{ kubeconfig_home }}/.kube/config"
+kubeadm_cluster_name: "{{ cluster_name | default('k8s-cluster') }}"
+kubeadm_pod_network_cidr: "{{ pod_network_cidr }}"
+kubeadm_service_cidr: "{{ service_cidr | default('10.96.0.0/12') }}"
+kubeadm_control_plane_endpoint: "{{ control_plane_endpoint }}"
+kubeadm_upload_certs: true
+kubeadm_skip_phases: []

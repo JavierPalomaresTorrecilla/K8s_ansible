@@ -1,0 +1,17 @@
+# Variables por defecto para el rol common
+common_base_packages:
+  - curl
+  - vim
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - jq
+  - chrony
+  - net-tools
+time_sync_service: chrony
+apt_cache_valid_time: 3600
+common_manage_hostname: true
+common_hostname: "{{ inventory_hostname }}"
+common_manage_hosts_entries: true
+common_manage_loopback_entry: true
+common_verify_peer_connectivity: false

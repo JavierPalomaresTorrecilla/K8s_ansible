@@ -1,0 +1,16 @@
+containerd_package_name: containerd.io
+containerd_package_version: "{{ containerd_version | default('') }}"
+containerd_config_path: /etc/containerd/config.toml
+containerd_config_dir: /etc/containerd
+containerd_service_name: containerd
+containerd_state: started
+containerd_enabled: true
+containerd_config_template: config.toml.j2
+containerd_repo_name: docker-ce
+containerd_repo_arch: amd64
+containerd_repo_url: https://download.docker.com/linux/ubuntu
+containerd_repo_components: stable
+containerd_repo_distribution: "{{ ansible_distribution_release | default(ansible_lsb.codename) | default('jammy') }}"
+containerd_keyring_dir: /etc/apt/keyrings
+containerd_keyring_path: "{{ containerd_keyring_dir }}/docker-archive-keyring.gpg"
+containerd_key_url: https://download.docker.com/linux/ubuntu/gpg

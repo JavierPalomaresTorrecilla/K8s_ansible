@@ -1,0 +1,29 @@
+- name: Check if worker already joined the cluster
+  ansible.builtin.stat:
+    path: "{{ kubeadm_worker_configured_path }}"
+  register: kubelet_conf
+
+- name: Ensure join token variables are defined
+  ansible.builtin.assert:
+    that:
+      - kubeadm_worker_join_token | length > 0
+      - kubeadm_discovery_token_ca_cert_hash | length > 0
+    fail_msg: "Variables kubeadm_worker_join_token and kubeadm_discovery_token_ca_cert_hash must be provided to join the cluster."
+  when: not kubelet_conf.stat.exists
+
+- name: Build kubeadm join command
+  ansible.builtin.set_fact:
+    kubeadm_join_command: >-
+      kubeadm join {{ kubeadm_join_control_plane_endpoint }}
+      --token {{ kubeadm_worker_join_token }}
+      --discovery-token-ca-cert-hash {{ kubeadm_discovery_token_ca_cert_hash }}
+      {% if kubeadm_join_extra_args %}
+      {{ kubeadm_join_extra_args | join(' ') }}
+      {% endif %}
+  when: not kubelet_conf.stat.exists
+
+- name: Join the node to the Kubernetes cluster
+  ansible.builtin.command: "{{ kubeadm_join_command | trim }}"
+  args:
+    creates: "{{ kubeadm_worker_configured_path }}"
+  when: not kubelet_conf.stat.exists

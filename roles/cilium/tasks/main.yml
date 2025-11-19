@@ -1,0 +1,20 @@
+- name: Check if Cilium daemonset exists
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ cilium_kubeconfig }}
+    -n {{ cilium_namespace }}
+    get daemonset cilium
+  register: cilium_status
+  failed_when: false
+  changed_when: false
+
+- name: Deploy Cilium CNI manifest
+  ansible.builtin.command: >
+    kubectl --kubeconfig {{ cilium_kubeconfig }}
+    apply -f {{ cilium_manifest_url }}
+  when: cilium_force_reinstall | bool or cilium_status.rc != 0
+  register: cilium_apply
+  changed_when: cilium_force_reinstall | bool or cilium_status.rc != 0
+  vars:
+    # Para activar/desactivar kube-proxy replacement cambie el manifiesto/CLI
+    # referenciado mediante cilium_manifest_url en función de cilium_kube_proxy_replacement.
+    _kube_proxy_replacement: "{{ cilium_kube_proxy_replacement }}"

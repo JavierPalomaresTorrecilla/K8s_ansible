@@ -1,0 +1,30 @@
+- name: Prepare operating system and install base packages
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - common
+    - k8s-prereqs
+    - container-runtime
+    - k8s-packages
+
+- name: Bootstrap Kubernetes control plane
+  hosts: kube_control_plane
+  become: true
+  gather_facts: false
+  roles:
+    - kubeadm-control-plane
+
+- name: Join worker nodes to the cluster
+  hosts: kube_node
+  become: true
+  gather_facts: false
+  roles:
+    - kubeadm-workers
+
+- name: Deploy Cilium CNI from control plane
+  hosts: kube_control_plane[0]
+  become: true
+  gather_facts: false
+  roles:
+    - cilium
