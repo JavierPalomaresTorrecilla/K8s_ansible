@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: ./single-node_deploy [--config <path>] [--host-ip <IP>] [--host-name <name>] [--inventory <path>] [--uninstall]
+
+Defaults come from config/single-node.conf (create/update it with HOST_IP and HOST_NAME).
+
+Actions:
+  (default) Install dependencies + bootstrap 1-node control plane locally.
+  --uninstall  : Run the uninstall playbook locally to revert everything.
+
+Examples:
+  ./single-node_deploy
+  ./single-node_deploy --host-ip 192.168.40.87 --host-name nuc-master
+  ./single-node_deploy --uninstall
+EOF
+}
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$repo_root"
+
+default_config_file="config/single-node.conf"
+config_file="$default_config_file"
+inventory_path="inventory/hosts.ini"
+action="install"
+cli_host_ip=""
+cli_host_name=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config)
+      config_file="${2:-}"
+      shift 2
+      ;;
+    --host-ip)
+      cli_host_ip="${2:-}"
+      shift 2
+      ;;
+    --host-name)
+      cli_host_name="${2:-}"
+      shift 2
+      ;;
+    --inventory)
+      inventory_path="${2:-}"
+      shift 2
+      ;;
+    --uninstall)
+      action="uninstall"
+      shift 1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -f "$config_file" ]]; then
+  # shellcheck disable=SC1090
+  source "$config_file"
+elif [[ "$config_file" != "$default_config_file" ]]; then
+  echo "Config file $config_file not found." >&2
+  exit 1
+fi
+
+host_ip="${cli_host_ip:-${HOST_IP:-${NODE_HOST_IP:-}}}"
+host_name="${cli_host_name:-${HOST_NAME:-${NODE_HOST_NAME:-nuc-master}}}"
+
+if [[ -z "$host_ip" ]]; then
+  echo "Error: host IP must be provided via --host-ip or $config_file (HOST_IP=...)." >&2
+  usage
+  exit 1
+fi
+
+if ! command -v ansible >/dev/null 2>&1; then
+  echo "ansible binary not found in PATH" >&2
+  exit 1
+fi
+
+if ! command -v ansible-playbook >/dev/null 2>&1; then
+  echo "ansible-playbook binary not found in PATH" >&2
+  exit 1
+fi
+
+ensure_hosts_entry() {
+  local ip="$1"
+  local name="$2"
+  local hosts_line="$ip $name"
+  if grep -Eq "^[[:space:]]*${ip//./\\.}[[:space:]]+${name}([[:space:]]|\$)" /etc/hosts; then
+    echo "[INFO] /etc/hosts already contains $hosts_line"
+    return
+  fi
+  echo "[INFO] Adding $hosts_line to /etc/hosts"
+  if [[ $EUID -ne 0 ]]; then
+    printf '%s\n' "$hosts_line" | sudo tee -a /etc/hosts >/dev/null
+  else
+    printf '%s\n' "$hosts_line" >> /etc/hosts
+  fi
+}
+
+cat > "$inventory_path" <<EOF
+[kube_control_plane]
+$host_name ansible_host=127.0.0.1 ansible_connection=local ansible_python_interpreter=/usr/bin/python3
+EOF
+
+mkdir -p inventory/group_vars
+
+cat > inventory/group_vars/kube_control_plane.yml <<EOF
+---
+# Managed by single-node_deploy
+control_plane_endpoint: $host_ip:6443
+etcd_extra_args: {}
+EOF
+
+ensure_hosts_entry "$host_ip" "$host_name"
+
+echo "[INFO] Inventory, group vars, and /etc/hosts updated for $host_name ($host_ip)"
+
+if [[ "$action" == "uninstall" ]]; then
+  echo "[INFO] Running uninstall playbook..."
+  ansible-playbook -i "$inventory_path" playbooks/uninstall.yml
+  exit $?
+fi
+
+echo "[INFO] Running site playbook (single control plane)..."
+ansible-playbook -i "$inventory_path" playbooks/site.yml --limit "$host_name"
+
+echo "[INFO] Checking cluster node status..."
+ansible -i "$inventory_path" "$host_name" -b -m command -a "kubectl get nodes -o wide"
+
+setup_local_kubeconfig() {
+  local remote_conf="/etc/kubernetes/admin.conf"
+  local local_dir="$HOME/.kube"
+  local local_conf="$local_dir/config"
+  if [[ ! -f "$remote_conf" ]]; then
+    echo "[WARN] $remote_conf not found; skipping local kubeconfig copy"
+    return
+  fi
+  #echo "[INFO] Setting up local kubeconfig at $local_conf"
+  mkdir -p "$local_dir"
+  sudo cp -f "$remote_conf" "$local_conf"
+  sudo chown "$(id -u):$(id -g)" "$local_conf"
+  chmod 600 "$local_conf"
+  #echo "[INFO] Local kubeconfig updated at $local_conf"
+}
+
+setup_local_kubeconfig
+
+echo "[INFO] All steps completed. Use ./single-node_deploy --uninstall to roll back."

@@ -22,9 +22,9 @@
   roles:
     - kubeadm-workers
 
-- name: Deploy Cilium CNI from control plane
+- name: Deploy Calico CNI from control plane
   hosts: kube_control_plane[0]
   become: true
   gather_facts: false
   roles:
-    - cilium
+    - calico

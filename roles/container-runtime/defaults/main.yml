@@ -14,3 +14,7 @@ containerd_repo_distribution: "{{ ansible_distribution_release | default(ansible
 containerd_keyring_dir: /etc/apt/keyrings
 containerd_keyring_path: "{{ containerd_keyring_dir }}/docker-archive-keyring.gpg"
 containerd_key_url: https://download.docker.com/linux/ubuntu/gpg
+containerd_clean_legacy_sources: true
+containerd_legacy_sources_cleanup:
+  - path: /etc/apt/sources.list
+    regexp: '^deb .*download\\.docker\\.com\\/linux\\/ubuntu.*$'

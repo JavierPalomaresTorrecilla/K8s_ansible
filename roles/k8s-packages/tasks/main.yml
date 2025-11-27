@@ -38,6 +38,7 @@
     name: "{{ kubernetes_package_specs }}"
     state: "{{ kubernetes_package_state }}"
     update_cache: true
+    allow_downgrades: true
   register: kubernetes_package_result
   notify: Restart kubelet
 

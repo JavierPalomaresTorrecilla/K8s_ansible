@@ -14,18 +14,6 @@
     path: "{{ k8s_uninstall_kubeconfig_path }}"
   register: kube_admin_conf
 
-- name: Remove Cilium deployment if present
-  ansible.builtin.command: >
-    kubectl --kubeconfig {{ k8s_uninstall_kubeconfig_path }}
-    delete -f {{ k8s_uninstall_cilium_manifest_url }}
-    --ignore-not-found=true
-  when:
-    - kube_admin_conf.stat.exists
-    - kubectl_binary.stat.exists
-  register: cilium_delete
-  changed_when: "'deleted' in cilium_delete.stdout"
-  failed_when: false
-
 - name: Reset kubeadm cluster state
   ansible.builtin.command: >
     kubeadm reset -f --cri-socket {{ k8s_uninstall_reset_cri_socket }}
@@ -40,6 +28,13 @@
     enabled: false
   failed_when: false
 
+- name: Stop containerd service when present
+  ansible.builtin.service:
+    name: containerd
+    state: stopped
+    enabled: true
+  failed_when: false
+
 - name: Remove Kubernetes directories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -52,12 +47,20 @@
     state: absent
   loop: "{{ k8s_uninstall_clean_files | reject('equalto', '') | list }}"
 
+- name: Unhold Kubernetes packages prior to removal
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: install
+  loop: "{{ k8s_uninstall_packages_to_remove }}"
+  when: k8s_uninstall_remove_packages | bool
+
 - name: Remove Kubernetes packages
   ansible.builtin.apt:
     name: "{{ k8s_uninstall_packages_to_remove }}"
     state: absent
     purge: true
     autoremove: true
+    allow_change_held_packages: true
   when: k8s_uninstall_remove_packages | bool
 
 - name: Remove container runtime packages
@@ -91,3 +94,17 @@
     path: "{{ k8s_uninstall_containerd_keyring_path }}"
     state: absent
   when: k8s_uninstall_remove_repos | bool
+
+- name: Start containerd service
+  ansible.builtin.service:
+    name: containerd
+    state: started
+    enabled: true
+  failed_when: false
+
+- name: Start kubelet service
+  ansible.builtin.service:
+    name: kubelet
+    state: started
+    enabled: true
+  failed_when: false

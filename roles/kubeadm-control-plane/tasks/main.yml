@@ -22,19 +22,19 @@
   args:
     creates: /etc/kubernetes/admin.conf
 
-- name: Ensure kubeconfig directory exists for {{ kubeconfig_user }}
+- name: Ensure kubeconfig directory exists for root
   ansible.builtin.file:
-    path: "{{ kubeconfig_home }}/.kube"
+    path: /root/.kube
     state: directory
-    owner: "{{ kubeconfig_user }}"
-    group: "{{ kubeconfig_group }}"
+    owner: root
+    group: root
     mode: "0700"
 
-- name: Copy admin.conf to user kubeconfig
+- name: Copy admin.conf to root kubeconfig
   ansible.builtin.copy:
     src: /etc/kubernetes/admin.conf
-    dest: "{{ kubeconfig_path }}"
+    dest: /root/.kube/config
     remote_src: true
-    owner: "{{ kubeconfig_user }}"
-    group: "{{ kubeconfig_group }}"
+    owner: root
+    group: root
     mode: "0600"

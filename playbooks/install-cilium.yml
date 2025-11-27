@@ -1,7 +1,0 @@
----
-- name: Deploy Cilium CNI via kubeadm control plane
-  hosts: kube_control_plane[0]
-  become: true
-  gather_facts: false
-  roles:
-    - role: cilium

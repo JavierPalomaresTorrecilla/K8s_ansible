@@ -1,10 +1,9 @@
 ---
 # Variables comunes para el clúster Kubernetes
-kube_version: "1.31.0"
+kube_version: "1.33.0"
 container_runtime: "containerd"
 runtime: "containerd"
 containerd_version: "1.7.27-1"
-cilium_version: "1.15.4"
 kubeconfig_user: "i2cat"
 kubeconfig_group: "i2cat"
 pod_network_cidr: "10.244.0.0/16"

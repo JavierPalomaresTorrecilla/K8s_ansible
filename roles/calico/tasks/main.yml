@@ -1,0 +1,26 @@
+- name: Apply Calico operator manifest
+  ansible.builtin.command: >
+    kubectl create -f {{ calico_operator_manifest_url }}
+  register: calico_operator_apply
+  changed_when: "'created' in calico_operator_apply.stdout"
+
+- name: Wait briefly for operator components to settle
+  ansible.builtin.pause:
+    seconds: "{{ calico_operator_apply_wait }}"
+
+- name: Apply Calico custom resources
+  ansible.builtin.command: >
+    kubectl create -f {{ calico_custom_resources_path }}
+  register: calico_custom_apply
+  changed_when: "'created' in calico_custom_apply.stdout"
+
+- name: Wait for nodes to report Ready status
+  ansible.builtin.command: >
+    kubectl get nodes --no-headers
+  register: calico_nodes_status
+  changed_when: false
+  until:
+    - calico_nodes_status.rc == 0
+    - "'NotReady' not in calico_nodes_status.stdout"
+  retries: "{{ calico_node_ready_retries }}"
+  delay: "{{ calico_node_ready_delay }}"

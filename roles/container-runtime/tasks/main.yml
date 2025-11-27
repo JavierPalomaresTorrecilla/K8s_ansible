@@ -6,6 +6,26 @@
     group: root
     mode: "0755"
 
+- name: Check legacy Docker repository sources
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  register: containerd_legacy_sources_stat
+  loop: "{{ containerd_legacy_sources_cleanup }}"
+  when: containerd_clean_legacy_sources | bool
+
+- name: Remove legacy Docker repository entries
+  ansible.builtin.lineinfile:
+    path: "{{ item.item.path }}"
+    regexp: "{{ item.item.regexp }}"
+    state: absent
+    backrefs: false
+  loop: "{{ containerd_legacy_sources_stat.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when:
+    - containerd_clean_legacy_sources | bool
+    - item.stat.exists
+
 - name: Download Docker/containerd repository key
   ansible.builtin.get_url:
     url: "{{ containerd_key_url }}"

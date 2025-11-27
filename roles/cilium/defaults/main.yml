@@ -1,7 +1,0 @@
-cilium_namespace: kube-system
-cilium_manifest_url: "https://raw.githubusercontent.com/cilium/cilium/v{{ cilium_version }}/install/kubernetes/quick-install.yaml"
-cilium_kubeconfig: /etc/kubernetes/admin.conf
-cilium_force_reinstall: false
-# Variable para documentar cómo habilitar/deshabilitar kube-proxy replacement.
-# Cuando se requiera manejarlo, proporcione un manifiesto/CLI alternativo que respete este valor.
-cilium_kube_proxy_replacement: "partial"
