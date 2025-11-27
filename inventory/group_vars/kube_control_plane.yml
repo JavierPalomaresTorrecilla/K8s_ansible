@@ -1,4 +1,2 @@
 ---
-# Managed by single-node_deploy
-control_plane_endpoint: 192.168.40.87:6443
-etcd_extra_args: {}
+control_plane_endpoint: :6443

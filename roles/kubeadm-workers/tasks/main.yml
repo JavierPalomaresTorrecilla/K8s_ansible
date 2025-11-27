@@ -9,7 +9,36 @@
       - kubeadm_worker_join_token | length > 0
       - kubeadm_discovery_token_ca_cert_hash | length > 0
     fail_msg: "Variables kubeadm_worker_join_token and kubeadm_discovery_token_ca_cert_hash must be provided to join the cluster."
-  when: not kubelet_conf.stat.exists
+  when:
+    - not kubelet_conf.stat.exists
+    - not kubeadm_auto_join | bool
+
+- name: Generate kubeadm join command on control plane
+  ansible.builtin.command: >-
+    kubeadm token create --print-join-command --ttl {{ kubeadm_join_token_ttl }}
+  delegate_to: "{{ groups['kube_control_plane'][0] }}"
+  run_once: true
+  register: kubeadm_auto_join_command_raw
+  when:
+    - not kubelet_conf.stat.exists
+    - kubeadm_auto_join | bool
+
+- name: Cache auto join command for other hosts
+  ansible.builtin.set_fact:
+    kubeadm_auto_join_command: "{{ kubeadm_auto_join_command_raw.stdout | trim }}"
+  delegate_to: "{{ groups['kube_control_plane'][0] }}"
+  delegate_facts: true
+  run_once: true
+  when:
+    - not kubelet_conf.stat.exists
+    - kubeadm_auto_join | bool
+
+- name: Use auto-generated join command
+  ansible.builtin.set_fact:
+    kubeadm_join_command: "{{ hostvars[groups['kube_control_plane'][0]].kubeadm_auto_join_command }}"
+  when:
+    - not kubelet_conf.stat.exists
+    - kubeadm_auto_join | bool
 
 - name: Build kubeadm join command
   ansible.builtin.set_fact:
@@ -20,7 +49,9 @@
       {% if kubeadm_join_extra_args %}
       {{ kubeadm_join_extra_args | join(' ') }}
       {% endif %}
-  when: not kubelet_conf.stat.exists
+  when:
+    - not kubelet_conf.stat.exists
+    - not kubeadm_auto_join | bool
 
 - name: Join the node to the Kubernetes cluster
   ansible.builtin.command: "{{ kubeadm_join_command | trim }}"

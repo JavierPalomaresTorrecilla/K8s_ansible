@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'HELP'
+Usage: ./multi-node_deploy [--config <path>] [--inventory <path>] [--uninstall]
+
+Configure master/workers in config/multi-node.conf.
+HELP
+}
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$repo_root"
+
+config_file="config/multi-node.conf"
+inventory_path="inventory/hosts.ini"
+action="install"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config)
+      config_file="${2:-}"
+      shift 2
+      ;;
+    --inventory)
+      inventory_path="${2:-}"
+      shift 2
+      ;;
+    --uninstall)
+      action="uninstall"
+      shift 1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
+  esac
+ done
+
+if [[ ! -f "$config_file" ]]; then
+  echo "Config file $config_file not found" >&2
+  exit 1
+fi
+# shellcheck disable=SC1090
+source "$config_file"
+
+: "${MASTER_HOST_NAME:?MASTER_HOST_NAME must be set}"
+: "${MASTER_HOST_IP:?MASTER_HOST_IP must be set}"
+: "${WORKERS:?WORKERS must be set}"
+default_worker_user="${WORKER_SSH_USER:-${USER:-ubuntu}}"
+
+IFS=';' read -ra worker_entries <<<"$WORKERS"
+if [[ ${#worker_entries[@]} -eq 0 ]]; then
+  echo "No worker hosts defined in WORKERS" >&2
+  exit 1
+fi
+
+cat > "$inventory_path" <<'INV'
+[kube_control_plane]
+INV
+printf "%s ansible_host=127.0.0.1 ansible_connection=local ansible_python_interpreter=/usr/bin/python3\n" "$MASTER_HOST_NAME" >> "$inventory_path"
+cat >> "$inventory_path" <<'INV'
+
+[kube_node]
+INV
+
+for entry in "${worker_entries[@]}"; do
+  [[ -z "$entry" ]] && continue
+  IFS=',' read -ra fields <<<"$entry"
+  if [[ ${#fields[@]} -lt 3 ]]; then
+    echo "Invalid worker entry: $entry" >&2
+    exit 1
+  fi
+  name="${fields[0]}"
+  host="${fields[1]}"
+  key="${fields[2]}"
+  port="${fields[3]:-22}"
+  user="$default_worker_user"
+  ssh_args=""
+  [[ -n "$key" ]] && ssh_args="ansible_ssh_private_key_file=$key"
+  printf "%s ansible_host=%s ansible_user=%s ansible_port=%s %s ansible_python_interpreter=/usr/bin/python3\n" \
+    "$name" "$host" "$user" "$port" "$ssh_args" >> "$inventory_path"
+ done
+
+cat > inventory/group_vars/kube_control_plane.yml <<EOF
+---
+control_plane_endpoint: $MASTER_HOST_IP:6443
+EOF
+
+if [[ "$action" == "uninstall" ]]; then
+  ansible-playbook -i "$inventory_path" playbooks/uninstall.yml
+  exit $?
+fi
+
+ansible-playbook -i "$inventory_path" playbooks/site.yml
+
+kubectl get nodes -o wide
