@@ -27,4 +27,4 @@
   become: true
   gather_facts: false
   roles:
-    - calico
+    - { role: calico, tags: ['calico'] }

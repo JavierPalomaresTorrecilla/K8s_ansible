@@ -1,2 +1,2 @@
 ---
-control_plane_endpoint: :6443
+control_plane_endpoint: 192.168.123.164:6443

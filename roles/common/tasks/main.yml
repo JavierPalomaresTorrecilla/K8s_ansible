@@ -19,15 +19,19 @@
     name: "{{ common_hostname }}"
   when: common_manage_hostname | bool
 
-- name: Ensure loopback hosts entry matches hostname
+- name: Ensure hosts entry for this node uses its primary address
+  vars:
+    _node_primary_ip: "{{ ansible_host | default(ansible_default_ipv4.address | default('')) }}"
+    _hostname_regex: "{{ common_hostname | regex_escape }}"
   ansible.builtin.lineinfile:
     path: /etc/hosts
-    regexp: "^127\\.0\\.1\\.1\\s+"
-    line: "127.0.1.1 {{ common_hostname }}"
+    regexp: "^\\S+\\s+{{ _hostname_regex }}(\\s|$)"
+    line: "{{ _node_primary_ip }} {{ common_hostname }}"
     state: present
   when:
     - common_manage_hosts_entries | bool
     - common_manage_loopback_entry | bool
+    - _node_primary_ip | length > 0
 
 - name: Ensure hosts entries for other cluster nodes
   ansible.builtin.lineinfile:

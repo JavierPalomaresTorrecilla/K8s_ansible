@@ -105,9 +105,28 @@ ensure_hosts_entry() {
   fi
 }
 
+setup_local_kubeconfig() {
+  local remote_conf="/etc/kubernetes/admin.conf"
+  local local_dir local_conf
+
+  local_dir="$HOME/.kube"
+  local_conf="$local_dir/config"
+
+  sudo mkdir -p "$local_dir"
+  sudo cp -i "$remote_conf" "$local_conf"
+  sudo chown $(id -u):$(id -g) "$local_conf"
+}
+
+cleanup_local_kubeconfig() {
+  local local_dir
+  local_dir="$HOME/.kube"
+  sudo rm -rf "$local_dir"
+  echo "[INFO] Removed local kubeconfig directory $local_dir"
+}
+
 cat > "$inventory_path" <<EOF
 [kube_control_plane]
-$host_name ansible_host=127.0.0.1 ansible_connection=local ansible_python_interpreter=/usr/bin/python3
+$host_name ansible_host=$host_ip ansible_connection=local ansible_python_interpreter=/usr/bin/python3
 EOF
 
 mkdir -p inventory/group_vars
@@ -125,8 +144,9 @@ echo "[INFO] Inventory, group vars, and /etc/hosts updated for $host_name ($host
 
 if [[ "$action" == "uninstall" ]]; then
   echo "[INFO] Running uninstall playbook..."
-  ansible-playbook -i "$inventory_path" playbooks/uninstall.yml
-  exit $?
+  ansible-playbook -i "$inventory_path" playbooks/uninstall.yml || exit $?
+  cleanup_local_kubeconfig
+  exit 0
 fi
 
 echo "[INFO] Running site playbook (single control plane)..."
@@ -134,22 +154,6 @@ ansible-playbook -i "$inventory_path" playbooks/site.yml --limit "$host_name"
 
 echo "[INFO] Checking cluster node status..."
 ansible -i "$inventory_path" "$host_name" -b -m command -a "kubectl get nodes -o wide"
-
-setup_local_kubeconfig() {
-  local remote_conf="/etc/kubernetes/admin.conf"
-  local local_dir="$HOME/.kube"
-  local local_conf="$local_dir/config"
-  if [[ ! -f "$remote_conf" ]]; then
-    echo "[WARN] $remote_conf not found; skipping local kubeconfig copy"
-    return
-  fi
-  #echo "[INFO] Setting up local kubeconfig at $local_conf"
-  mkdir -p "$local_dir"
-  sudo cp -f "$remote_conf" "$local_conf"
-  sudo chown "$(id -u):$(id -g)" "$local_conf"
-  chmod 600 "$local_conf"
-  #echo "[INFO] Local kubeconfig updated at $local_conf"
-}
 
 setup_local_kubeconfig
 

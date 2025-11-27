@@ -52,7 +52,7 @@ source "$config_file"
 : "${MASTER_HOST_NAME:?MASTER_HOST_NAME must be set}"
 : "${MASTER_HOST_IP:?MASTER_HOST_IP must be set}"
 : "${WORKERS:?WORKERS must be set}"
-default_worker_user="${WORKER_SSH_USER:-${USER:-ubuntu}}"
+default_worker_user="${USER:-$(id -un)}"
 
 IFS=';' read -ra worker_entries <<<"$WORKERS"
 if [[ ${#worker_entries[@]} -eq 0 ]]; then
@@ -60,10 +60,49 @@ if [[ ${#worker_entries[@]} -eq 0 ]]; then
   exit 1
 fi
 
+_resolve_kube_owner() {
+  _kube_target_user="${SUDO_USER:-$USER}"
+  local passwd_entry
+  passwd_entry="$(getent passwd "$_kube_target_user" || true)"
+  _kube_target_home="$(cut -d: -f6 <<<"$passwd_entry")"
+  [[ -z "$_kube_target_home" ]] && _kube_target_home="$HOME"
+  _kube_target_uid="$(id -u "$_kube_target_user" 2>/dev/null || id -u)"
+  _kube_target_gid="$(id -g "$_kube_target_user" 2>/dev/null || id -g)"
+  _kube_local_dir="$_kube_target_home/.kube"
+  _kube_local_conf="$_kube_local_dir/config"
+}
+
+ensure_local_kube_dir() {
+  _resolve_kube_owner
+  sudo install -d -m 700 -o "$_kube_target_uid" -g "$_kube_target_gid" "$_kube_local_dir"
+}
+
+setup_local_kubeconfig() {
+  local remote_conf="/etc/kubernetes/admin.conf"
+  ensure_local_kube_dir
+  if [[ ! -f "$remote_conf" ]]; then
+    echo "[WARN] $remote_conf not found; created $_kube_local_dir but skipping kubeconfig copy"
+    return
+  fi
+  sudo cp -f "$remote_conf" "$_kube_local_conf"
+  sudo chown "$_kube_target_uid:$_kube_target_gid" "$_kube_local_conf"
+  sudo chmod 600 "$_kube_local_conf"
+  echo "[INFO] Copied kubeconfig to $_kube_local_conf"
+}
+
+cleanup_local_kubeconfig() {
+  _resolve_kube_owner
+  if [[ -d "$_kube_local_dir" ]]; then
+    sudo rm -rf "$_kube_local_dir"
+    echo "[INFO] Removed local kubeconfig directory $_kube_local_dir"
+  fi
+}
+
 cat > "$inventory_path" <<'INV'
 [kube_control_plane]
 INV
-printf "%s ansible_host=127.0.0.1 ansible_connection=local ansible_python_interpreter=/usr/bin/python3\n" "$MASTER_HOST_NAME" >> "$inventory_path"
+printf "%s ansible_host=%s ansible_connection=local ansible_python_interpreter=/usr/bin/python3\n" \
+  "$MASTER_HOST_NAME" "$MASTER_HOST_IP" >> "$inventory_path"
 cat >> "$inventory_path" <<'INV'
 
 [kube_node]
@@ -79,8 +118,16 @@ for entry in "${worker_entries[@]}"; do
   name="${fields[0]}"
   host="${fields[1]}"
   key="${fields[2]}"
-  port="${fields[3]:-22}"
   user="$default_worker_user"
+  port="22"
+  if [[ ${#fields[@]} -ge 4 ]]; then
+    if [[ "${fields[3]}" =~ ^[0-9]+$ ]]; then
+      port="${fields[3]}"
+    else
+      user="${fields[3]}"
+      port="${fields[4]:-22}"
+    fi
+  fi
   ssh_args=""
   [[ -n "$key" ]] && ssh_args="ansible_ssh_private_key_file=$key"
   printf "%s ansible_host=%s ansible_user=%s ansible_port=%s %s ansible_python_interpreter=/usr/bin/python3\n" \
@@ -92,11 +139,23 @@ cat > inventory/group_vars/kube_control_plane.yml <<EOF
 control_plane_endpoint: $MASTER_HOST_IP:6443
 EOF
 
+ansible_cmd=(ansible-playbook -i "$inventory_path" playbooks/site.yml)
+
 if [[ "$action" == "uninstall" ]]; then
-  ansible-playbook -i "$inventory_path" playbooks/uninstall.yml
-  exit $?
+  ansible-playbook -i "$inventory_path" playbooks/uninstall.yml || exit $?
+  cleanup_local_kubeconfig
+  exit 0
 fi
 
-ansible-playbook -i "$inventory_path" playbooks/site.yml
+
+ensure_local_kube_dir
+
+echo "[INFO] Running site playbook (control plane + workers, skipping Calico)..."
+"${ansible_cmd[@]}" --skip-tags calico
+
+setup_local_kubeconfig
+
+echo "[INFO] Deploying Calico CNI..."
+"${ansible_cmd[@]}" --tags calico
 
 kubectl get nodes -o wide

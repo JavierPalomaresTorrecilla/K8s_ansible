@@ -1,8 +1,18 @@
 kubeadm_config_dir: /etc/kubernetes/kubeadm
 kubeadm_config_path: "{{ kubeadm_config_dir }}/kubeadm-config.yaml"
-kubeconfig_user: "{{ ansible_user | default('ubuntu') }}"
-kubeconfig_group: "{{ kubeconfig_user }}"
-kubeconfig_home: "{{ '/home/' ~ kubeconfig_user }}"
+kubeconfig_user: >-
+  {{ ansible_env.SUDO_USER
+     | default(ansible_user_id
+     | default(ansible_user
+     | default(lookup('ansible.builtin.env', 'USER')))) }}
+kubeconfig_group: >-
+  {{ ansible_env.SUDO_GID
+     | default(ansible_user_gid
+     | default(kubeconfig_user)) }}
+kubeconfig_home: >-
+  {{ ansible_user_dir
+     | default(ansible_env.HOME
+     | default('/home/' ~ kubeconfig_user)) }}
 kubeconfig_path: "{{ kubeconfig_home }}/.kube/config"
 kubeadm_cluster_name: "{{ cluster_name | default('k8s-cluster') }}"
 kubeadm_pod_network_cidr: "{{ pod_network_cidr }}"

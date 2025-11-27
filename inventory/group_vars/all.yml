@@ -4,6 +4,13 @@ kube_version: "1.33.0"
 container_runtime: "containerd"
 runtime: "containerd"
 containerd_version: "1.7.27-1"
-kubeconfig_user: "i2cat"
-kubeconfig_group: "i2cat"
+kubeconfig_user: >-
+  {{ ansible_env.SUDO_USER
+     | default(ansible_user_id
+     | default(ansible_user
+     | default(lookup('ansible.builtin.env', 'USER')))) }}
+kubeconfig_group: >-
+  {{ ansible_env.SUDO_GID
+     | default(ansible_user_gid
+     | default(kubeconfig_user)) }}
 pod_network_cidr: "10.244.0.0/16"
