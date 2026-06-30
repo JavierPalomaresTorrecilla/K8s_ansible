@@ -68,6 +68,10 @@ Configure `config/multi-node.conf`, then run:
 ```bash
 ./multi-node_deploy
 ```
+In the scenario that the last step of the ansible fails when applying the `playbooks/config/custom-resources.yaml` file, it is okey. Launch it again with:
+```bash
+kubectl create -f playbooks/config/custom-resources.yaml
+```
 
 
 After either workflow, the `kubectl get nodes -o wide` command at the end verifies cluster health. Use `./*_deploy --uninstall` to roll back.
